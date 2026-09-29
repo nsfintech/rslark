@@ -1,0 +1,48 @@
+# Rust quality gates and workspace tests. The reusable organization workflow
+# runs fmt, clippy, and cargo-deny; tests are a separate caller job.
+name: rust-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  detect-cargo:
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.cargo.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect Cargo manifest
+        id: cargo
+        shell: bash
+        run: |
+          if [ -f Cargo.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No Cargo manifest yet; Rust checks will run after the SDK crate is added."
+          fi
+
+  rust-ci:
+    needs: detect-cargo
+    if: needs.detect-cargo.outputs.present == 'true'
+    uses: nsfintech/.github/.github/workflows/rust-ci.yml@v1
+    with:
+      toolchain: stable
+    secrets: inherit
+
+  cargo-test:
+    name: Cargo workspace tests
+    needs: detect-cargo
+    if: needs.detect-cargo.outputs.present == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run workspace tests
+        run: cargo test --workspace --all-features

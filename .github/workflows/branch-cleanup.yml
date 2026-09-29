@@ -1,0 +1,27 @@
+# 延迟删除分支：每天巡扫，删除合并/关闭超过 retention-days 天的远程分支。
+# 调用 nsfintech/.github 的可复用 workflow。
+# 启用前请在 Settings -> General -> Pull Requests 关闭
+# "Automatically delete head branches"，否则合并后分支会立即删除。
+name: Branch cleanup
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # 每天 03:17 UTC 巡扫
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 试运行（只列出将删除的分支，不实际删除）
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  sweep:
+    uses: nsfintech/.github/.github/workflows/branch-cleanup.yml@v1
+    with:
+      retention-days: 14
+      dry-run: ${{ inputs.dry-run == true }}
+    secrets: inherit

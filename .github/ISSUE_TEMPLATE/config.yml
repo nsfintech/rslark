@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 贡献指南
+    url: https://github.com/nsfintech/.github/blob/main/CONTRIBUTING.md
+    about: 提交前请先阅读贡献指南（提交规范、发版流程等）。

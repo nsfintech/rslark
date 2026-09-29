@@ -1,0 +1,43 @@
+# Cargo only. Fill cargo-publish-crates with real publishable crate name(s)
+# in dependency order once Cargo manifests are added; do not guess package names.
+# If GitHub App credentials are unavailable, publish manually via workflow_dispatch
+# on a checkout whose HEAD is exactly tagged v*.
+name: repsy-publish
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  detect-cargo:
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.cargo.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect root Cargo manifest
+        id: cargo
+        shell: bash
+        run: |
+          if [ -f Cargo.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No Cargo.toml yet; skipping Repsy publish until crate names are known."
+          fi
+
+  repsy:
+    needs: detect-cargo
+    if: needs.detect-cargo.outputs.present == 'true'
+    uses: nsfintech/.github/.github/workflows/repsy-publish.yml@v1
+    with:
+      publish-cargo: true
+      publish-npm: false
+      publish-pypi: false
+      # Pending SDK Cargo package creation: set actual package name(s) here.
+      cargo-publish-crates: ''
+      require-branch: main

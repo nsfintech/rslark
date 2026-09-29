@@ -1,0 +1,50 @@
+name: Bug 报告
+description: 报告一个 bug
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告 bug！请尽量填全以下信息。
+  - type: textarea
+    id: description
+    attributes:
+      label: 现象描述
+      description: 发生了什么？期望是什么？
+      placeholder: |
+        实际行为：
+        期望行为：
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本 / commit
+      placeholder: "v1.2.0 或 commit sha"
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境
+      placeholder: "OS、Rust 版本、相关依赖版本等"
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 错误信息
+      render: shell
+    validations:
+      required: false

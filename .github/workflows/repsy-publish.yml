@@ -1,7 +1,7 @@
-# Cargo only. Fill cargo-publish-crates with real publishable crate name(s)
-# in dependency order once Cargo manifests are added; do not guess package names.
-# If GitHub App credentials are unavailable, publish manually via workflow_dispatch
-# on a checkout whose HEAD is exactly tagged v*.
+# Disabled unless repository variables explicitly enable publishing and confirm
+# the crate list and Repsy credentials are ready. Configure these variables in
+# Settings -> Secrets and variables -> Actions: REPSY_PUBLISH_ENABLED,
+# REPSY_CREDENTIALS_READY, and REPSY_CARGO_PUBLISH_CRATES.
 name: repsy-publish
 
 on:
@@ -32,12 +32,15 @@ jobs:
 
   repsy:
     needs: detect-cargo
-    if: needs.detect-cargo.outputs.present == 'true'
+    if: >-
+      needs.detect-cargo.outputs.present == 'true' &&
+      vars.REPSY_PUBLISH_ENABLED == 'true' &&
+      vars.REPSY_CREDENTIALS_READY == 'true' &&
+      vars.REPSY_CARGO_PUBLISH_CRATES != ''
     uses: nsfintech/.github/.github/workflows/repsy-publish.yml@v1
     with:
       publish-cargo: true
       publish-npm: false
       publish-pypi: false
-      # Pending SDK Cargo package creation: set actual package name(s) here.
-      cargo-publish-crates: ''
-      require-branch: main
+      cargo-publish-crates: ${{ vars.REPSY_CARGO_PUBLISH_CRATES }}
+      require-branch: test,main

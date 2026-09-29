@@ -1,5 +1,4 @@
-# Per-repository cargo-deny policy. This applies once the SDK Cargo package
-# is added; the repository currently has no Cargo manifest.
+# Per-repository cargo-deny policy for the rslark crate.
 
 [advisories]
 version = 2
@@ -12,6 +11,7 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
     "CC0-1.0",
     "ISC",
     "MIT",

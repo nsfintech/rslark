@@ -24,4 +24,5 @@ jobs:
     with:
       retention-days: 14
       dry-run: ${{ inputs.dry-run == true }}
+      exclude-patterns: test
     secrets: inherit

@@ -1,13 +1,12 @@
-# 推送 Conventional Commits 到 main 后，由 release-please 创建稳定版 Release PR。
-# 单 Rust crate 应在根 Cargo.toml 声明 package.version；release-type: rust
-# 会更新该 manifest 并生成 vX.Y.Z tag。当前尚无 Cargo manifest，首次版本尚待确定。
+# 推送 Conventional Commits 到 main/test 后，由 release-please 分别创建 stable/rc Release PR。
+# 单 Rust crate 在根 Cargo.toml 声明 package.version；release-type: rust 会更新 manifest。
 # GitHub App token 由组织自托管 runner 凭证提供；缺少时 workflow 回退 GITHUB_TOKEN。
 # 调用 nsfintech/.github 的可复用 workflow。
 name: release-please
 
 on:
   push:
-    branches: [main]
+    branches: [main, test]
 
 permissions:
   contents: write
@@ -29,7 +28,7 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "No root Cargo.toml yet; release-please will run after the SDK manifest is added."
+            echo "No root Cargo.toml; release-please is skipped."
           fi
 
   release-please:
@@ -38,7 +37,7 @@ jobs:
     uses: nsfintech/.github/.github/workflows/release-please.yml@v1
     with:
       release-type: rust
-      # This repository currently uses only main; disable the organization
-      # default sync-back to test for this single-branch model.
-      sync-back-to: ''
+      prerelease: ${{ github.ref_name == 'test' }}
+      prerelease-type: rc
+      sync-back-to: ${{ github.ref_name == 'main' && 'test' || '' }}
     secrets: inherit

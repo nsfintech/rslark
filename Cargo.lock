@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "rslark"
-version = "0.1.0-rc"
+version = "0.1.0-rc.1"
 dependencies = [
  "futures-util",
  "prost",

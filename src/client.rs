@@ -273,7 +273,9 @@ impl Client {
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned);
         let bytes = response.bytes().await?;
-        let envelope: ApiResponse<()> = serde_json::from_slice(&bytes)?;
+        // CardKit update endpoints return `data: {}` on success. This helper
+        // discards success data, so accept any JSON value instead of unit.
+        let envelope: ApiResponse<serde_json::Value> = serde_json::from_slice(&bytes)?;
         if !status.is_success() && envelope.code == 0 {
             return Err(Error::InvalidResponse(format!(
                 "HTTP {status} without a platform error code"

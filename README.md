@@ -86,6 +86,69 @@ client
 `Card::new` accepts any valid Card JSON object. `Client::create_card` creates
 a CardKit entity, and `Client::send_card_entity` sends that reusable entity.
 
+## Update Card Kit streaming cards
+
+CardKit streaming updates use a caller-owned monotonic sequence. The SDK sends
+the requests in the order you call them but intentionally provides no throttling,
+task state, retry loop, or card layout policy; those concerns belong to the
+backend using the card.
+
+```rust
+use rslark::ReceiveIdType;
+use rslark::card::{CardBuilder, UpdateCardContentRequest, UpdateCardRequest, UpdateCardSettingsRequest};
+
+# async fn example(
+#     client: rslark::Client,
+#     receive_id: &str,
+# ) -> Result<(), rslark::Error> {
+let initial = CardBuilder::new()
+    .streaming_mode(true)
+    .markdown_with_id("research_stream", "**准备中**")
+    .build()?;
+let created = client.create_streaming_card(&initial).await?;
+client
+    .send_card_entity(
+        ReceiveIdType::ChatId,
+        receive_id,
+        created.card_id.as_str(),
+        None,
+    )
+    .await?;
+
+client
+    .update_card_element_content(
+        &created.card_id,
+        "research_stream",
+        UpdateCardContentRequest::new("**分析中**\n\n已收集 3 条资料", 1),
+    )
+    .await?;
+
+let final_card = CardBuilder::new()
+    .markdown("### 研究报告\n\n最终内容")
+    .build()?;
+client
+    .update_card(
+        &created.card_id,
+        UpdateCardRequest::new(&final_card, 2)?,
+    )
+    .await?;
+
+let settings = serde_json::json!({ "config": { "streaming_mode": false } });
+client
+    .update_card_settings(
+        &created.card_id,
+        UpdateCardSettingsRequest::new(&settings, 3)?,
+    )
+    .await?;
+# Ok(())
+# }
+```
+
+For the same card, every update must use a strictly increasing `sequence`.
+The value is an `i32` because the platform accepts `1..=2147483647`. The final
+settings update can set `config.streaming_mode` to `false` after replacing the
+placeholder with the final report.
+
 ## Receive events over WebSocket
 
 ```rust
@@ -137,10 +200,12 @@ Current Open API support includes:
   get, and recall.
 - Card JSON 2.0 construction, CardKit entity creation, and card-entity
   delivery.
+- Streaming CardKit creation, Markdown element content updates, full-card
+  replacement, and settings updates (including turning streaming mode off).
 - Event-name routing, message-event parsing, card-action parsing, and
   Feishu/Lark WebSocket long connections.
 
 The SDK does not yet cover user OAuth tokens, marketplace-application tokens,
-media upload APIs, full CardKit card updates, or every IM endpoint. Raw
+media upload APIs, every CardKit update operation, or every IM endpoint. Raw
 platform JSON can be sent with `send_message` where a message type is already
 supported by the platform but lacks a typed helper.

@@ -15,7 +15,10 @@ pub mod ws;
 
 pub use auth::AppCredentials;
 #[cfg(feature = "http")]
-pub use card::{Card, CardBuilder};
+pub use card::{
+    Card, CardBuilder, CardKitCard, CreateCardRequest, CreatedCard, UpdateCardContentRequest,
+    UpdateCardRequest, UpdateCardSettingsRequest,
+};
 pub use client::{Client, ClientConfig};
 pub use error::{Error, Result};
 #[cfg(feature = "serde")]

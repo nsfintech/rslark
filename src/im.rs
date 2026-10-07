@@ -101,6 +101,29 @@ impl Client {
         .await
     }
 
+    /// Create a message with arbitrary platform message JSON as a user.
+    ///
+    /// The access token must be a `user_access_token`; it is used directly and
+    /// is never exchanged for or mixed with the client's tenant token.
+    pub async fn send_message_as_user(
+        &self,
+        user_access_token: impl AsRef<str>,
+        receive_id_type: ReceiveIdType,
+        request: SendMessageRequest,
+    ) -> Result<Message> {
+        self.request_json_with_token(
+            user_access_token,
+            reqwest::Method::POST,
+            "/open-apis/im/v1/messages",
+            Some(vec![(
+                "receive_id_type",
+                receive_id_type.as_str().to_owned(),
+            )]),
+            Some(&request),
+        )
+        .await
+    }
+
     /// Send a text message.
     pub async fn send_text(
         &self,
@@ -201,6 +224,7 @@ impl Client {
 
 #[cfg(all(test, feature = "http"))]
 mod tests {
+    use super::SendMessageRequest;
     use crate::{auth::AppCredentials, client::ClientConfig, im::ReceiveIdType};
     use std::{
         io::{Read, Write},
@@ -261,6 +285,95 @@ mod tests {
         assert!(message_request.contains(r#""receive_id":"oc_1""#));
         assert!(message_request.contains(r#""content":"{\"text\":\"hello\"}""#));
         assert!(message_request.contains(r#""uuid":"uuid-1""#));
+    }
+
+    #[tokio::test]
+    async fn sends_message_with_user_access_token() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let (request_sender, request_receiver) = mpsc::channel::<String>();
+
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_request(&mut stream);
+            request_sender.send(request).unwrap();
+            let response =
+                r#"{"code":0,"msg":"ok","data":{"message_id":"om_user","msg_type":"text"}}"#;
+            let http_response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nX-Tt-Logid: user-request-id\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
+                response.len()
+            );
+            stream.write_all(http_response.as_bytes()).unwrap();
+        });
+
+        let client = crate::Client::with_config(ClientConfig::with_api_base_url(base_url)).unwrap();
+        let message = client
+            .send_message_as_user(
+                "user-token",
+                ReceiveIdType::OpenId,
+                SendMessageRequest {
+                    receive_id: "ou_user".into(),
+                    msg_type: "text".into(),
+                    content: r#"{"text":"from user"}"#.into(),
+                    uuid: Some("user-uuid".into()),
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(message.message_id.as_deref(), Some("om_user"));
+        let request = request_receiver.recv().unwrap();
+        assert!(request.starts_with("POST /open-apis/im/v1/messages?receive_id_type=open_id"));
+        assert!(request.contains("Bearer user-token"));
+        assert!(request.contains(r#""receive_id":"ou_user""#));
+        assert!(request.contains(r#""uuid":"user-uuid""#));
+        assert!(request.contains(r#""content":"{\"text\":\"from user\"}""#));
+    }
+
+    #[tokio::test]
+    async fn maps_user_message_api_errors_with_request_id() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let (request_sender, _request_receiver) = mpsc::channel::<String>();
+
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let request = read_request(&mut stream);
+            request_sender.send(request).unwrap();
+            let response = r#"{"code":230002,"msg":"no permission"}"#;
+            let http_response = format!(
+                "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nX-Tt-Logid: user-error-id\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
+                response.len()
+            );
+            stream.write_all(http_response.as_bytes()).unwrap();
+        });
+
+        let client = crate::Client::with_config(ClientConfig::with_api_base_url(base_url)).unwrap();
+        let error = client
+            .send_message_as_user(
+                "user-token",
+                ReceiveIdType::OpenId,
+                SendMessageRequest {
+                    receive_id: "ou_user".into(),
+                    msg_type: "text".into(),
+                    content: r#"{"text":"from user"}"#.into(),
+                    uuid: None,
+                },
+            )
+            .await
+            .unwrap_err();
+
+        let crate::Error::Api {
+            code,
+            msg,
+            request_id,
+        } = error
+        else {
+            panic!("expected API error, got {error:?}");
+        };
+        assert_eq!(code, 230002);
+        assert_eq!(msg, "no permission");
+        assert_eq!(request_id.as_deref(), Some("user-error-id"));
     }
 
     fn read_request(stream: &mut std::net::TcpStream) -> String {

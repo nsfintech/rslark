@@ -242,6 +242,58 @@ impl Client {
     }
 
     #[cfg(feature = "http")]
+    pub(crate) async fn request_json_with_token<T, B>(
+        &self,
+        access_token: impl AsRef<str>,
+        method: reqwest::Method,
+        path: &str,
+        query: Option<Vec<(&str, String)>>,
+        body: Option<&B>,
+    ) -> Result<T>
+    where
+        B: serde::Serialize,
+        T: DeserializeOwned,
+    {
+        let mut request = self
+            .http
+            .request(method, self.config.api_url(path))
+            .bearer_auth(access_token.as_ref())
+            .header("Content-Type", "application/json");
+        if let Some(query) = query {
+            request = request.query(&query);
+        }
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+
+        let response = request.send().await?;
+        let status = response.status();
+        let request_id = response
+            .headers()
+            .get("X-Tt-Logid")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        let bytes = response.bytes().await?;
+        let envelope: ApiResponse<T> = serde_json::from_slice(&bytes)?;
+        if !status.is_success() && envelope.code == 0 {
+            return Err(Error::InvalidResponse(format!(
+                "HTTP {status} without a platform error code"
+            )));
+        }
+        if envelope.code != 0 {
+            return Err(Error::Api {
+                code: envelope.code,
+                msg: envelope.msg,
+                request_id,
+            });
+        }
+
+        envelope
+            .data
+            .ok_or_else(|| Error::InvalidResponse("response data is missing".into()))
+    }
+
+    #[cfg(feature = "http")]
     pub(crate) async fn request_empty<B>(
         &self,
         method: reqwest::Method,

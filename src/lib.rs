@@ -10,6 +10,8 @@ pub mod events;
 pub mod http;
 #[cfg(feature = "http")]
 pub mod im;
+#[cfg(feature = "http")]
+pub mod user_auth;
 #[cfg(feature = "websocket")]
 pub mod ws;
 
@@ -25,5 +27,9 @@ pub use error::{Error, Result};
 pub use events::{EventRouter, RawEvent};
 #[cfg(feature = "http")]
 pub use im::ReceiveIdType;
+#[cfg(feature = "http")]
+pub use user_auth::{
+    DeviceAuthorization, DeviceFlowClient, InMemoryTokenStore, TokenStore, UserAccessToken,
+};
 #[cfg(feature = "websocket")]
 pub use ws::WsClient;

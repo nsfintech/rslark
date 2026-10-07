@@ -35,6 +35,83 @@ assert_eq!(lark.config().api_base_url, "https://open.larksuite.com");
 The client obtains a `tenant_access_token`, caches it in memory, and refreshes
 it five minutes before expiry. API requests automatically carry the token.
 
+## Authorize a user with Device Flow
+
+User authorization uses OAuth Device Flow and does not require a redirect URL
+or HTTP callback. The application must show the authorization URI and user code
+to the correct user; the SDK does not assume a Feishu card, chat context, or
+other interactive UI.
+
+```rust
+use rslark::{
+    AppCredentials, ClientConfig, DeviceFlowClient, InMemoryTokenStore, TokenStore,
+};
+use std::time::Duration;
+
+# async fn example() -> Result<(), rslark::Error> {
+let credentials = AppCredentials::new("cli_app", "app_secret");
+let device_flow = DeviceFlowClient::new(credentials, ClientConfig::feishu())?;
+let store = InMemoryTokenStore::default();
+
+let authorization = device_flow
+    .start(["im:message", "im:message.send_as_user", "offline_access"])
+    .await?;
+
+// Your application renders this to the user. For example, show a terminal
+// prompt, web page, email, or another channel that the user already trusts.
+println!(
+    "Open {} and enter code {}",
+    authorization
+        .verification_uri_complete
+        .as_deref()
+        .unwrap_or(&authorization.verification_uri),
+    authorization.user_code
+);
+
+let user_token = device_flow
+    .poll(
+        authorization.device_code,
+        Some(Duration::from_secs(authorization.interval)),
+        Some(Duration::from_secs(authorization.expires_in)),
+    )
+    .await?;
+
+// Feishu token responses do not include open_id. Use your own stable user key,
+// such as an open_id obtained before authorization, as the TokenStore key.
+store.set("ou_user", user_token).await?;
+# Ok(())
+# }
+```
+
+`poll` follows the returned interval and handles `authorization_pending`,
+`slow_down`, `access_denied`, and `expired_token`. `slow_down` increases the
+next interval by five seconds. The token type redacts tokens in its `Debug`
+output; the SDK does not log credentials.
+
+Refresh a token before it expires. A refresh token is single-use: if a new
+`refresh_token` is returned, persist the whole token immediately and discard
+the old refresh token.
+
+```rust
+use rslark::{DeviceFlowClient, TokenStore};
+use std::time::Duration;
+
+# async fn example(
+#     device_flow: DeviceFlowClient,
+#     store: impl TokenStore,
+#     refresh_token: &str,
+# ) -> Result<(), rslark::Error> {
+let refreshed = device_flow.refresh(refresh_token).await?;
+store.set("ou_user", refreshed).await?;
+# Ok(())
+# }
+```
+
+`TokenStore` is an async trait for production storage backends. The built-in
+`InMemoryTokenStore` is process-local and intended for tests and short-lived
+processes. For persistence, implement `TokenStore` with an encrypted or
+access-controlled backend such as a KMS, Vault, or database.
+
 ## Send and receive messages
 
 ```rust
@@ -62,6 +139,40 @@ println!("{}", reply.message_id.as_deref().unwrap_or_default());
 
 `send_message` and `reply_message` also accept raw platform message JSON when
 an application needs message types without dedicated helpers.
+
+To create a message as the authorized user, use `send_message_as_user`. The
+user token is sent directly as `Authorization: Bearer <user_access_token>` and
+is never exchanged for or mixed with the tenant token.
+
+```rust
+use rslark::ReceiveIdType;
+use rslark::im::SendMessageRequest;
+
+# async fn example(
+#     client: rslark::Client,
+#     access_token: &str,
+# ) -> Result<(), rslark::Error> {
+let message = client
+    .send_message_as_user(
+        access_token,
+        ReceiveIdType::OpenId,
+        SendMessageRequest {
+            receive_id: "ou_user".into(),
+            msg_type: "text".into(),
+            content: r#"{"text":"Sent as the user"}"#.into(),
+            uuid: Some("user-message-uuid".into()),
+        },
+    )
+    .await?;
+println!("{}", message.message_id.as_deref().unwrap_or_default());
+# Ok(())
+# }
+```
+
+For user-identity message creation, the current official IM send-message
+documentation requires both `im:message` and `im:message.send_as_user`. Scopes
+must also be approved for the application; requesting a scope in Device Flow
+does not bypass open-platform permission approval.
 
 ## Send interactive cards
 
@@ -196,8 +307,11 @@ field.
 Current Open API support includes:
 
 - Self-built application `tenant_access_token` acquisition and cached refresh.
+- OAuth Device Flow authorization, user access token polling and refresh, and
+  an async TokenStore abstraction with an in-memory implementation.
 - IM message create, text create, interactive-card create, reply, text reply,
-  get, and recall.
+  get, and recall, including message create with an explicit user access
+  token.
 - Card JSON 2.0 construction, CardKit entity creation, and card-entity
   delivery.
 - Streaming CardKit creation, Markdown element content updates, full-card

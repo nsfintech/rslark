@@ -29,6 +29,19 @@ pub enum Error {
         /// Request identifier returned by the platform, when present.
         request_id: Option<String>,
     },
+    /// An OAuth user-authorization request failed.
+    #[cfg(feature = "http")]
+    #[error("OAuth error {code}: {error}: {error_description}")]
+    OAuth {
+        /// OAuth or platform error code.
+        code: i64,
+        /// OAuth error type, such as `access_denied`.
+        error: String,
+        /// Human-readable OAuth error description.
+        error_description: String,
+        /// Request identifier returned by the platform, when present.
+        request_id: Option<String>,
+    },
     /// A WebSocket operation failed.
     #[cfg(feature = "websocket")]
     #[error("WebSocket operation failed: {0}")]
